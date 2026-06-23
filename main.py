@@ -896,34 +896,97 @@ class Cocina:
         self.mensajes_flotantes.append({"texto": texto, "color": color, "x": GRID_X + GRID_COLS * TILE // 2, "y": GRID_Y + 55, "t": 1.4})
 
 # Ingredientes
-
-
-# Ingredientes del primer restaurante.
 def ing_pan() -> PanesYBases:
+    """Crea un pan."""
     return PanesYBases("pan", "pan")
 
 
 def ing_carne() -> Proteina:
+    """Crea una carne."""
     return Proteina("carne", "carne")
 
 
 def ing_lechuga() -> VegetalFruta:
+    """Crea una lechuga."""
     return VegetalFruta("lechuga", "lechuga")
 
 
 def ing_papas() -> PapaFreir:
+    """Crea unas papas."""
     return PapaFreir("papas", "papas")
 
 
+def ing_pollo() -> Proteina:
+    """Crea un pollo."""
+    return Proteina("pollo", "pollo")
+
+
+def ing_tomate() -> VegetalFruta:
+    """Crea un tomate."""
+    return VegetalFruta("tomate", "tomate")
+
+
+def ing_arroz() -> PanesYBases:
+    """Crea arroz listo."""
+    return PanesYBases("arroz", "arroz")
+
+
+def ing_frijoles() -> PanesYBases:
+    """Crea frijoles listos."""
+    return PanesYBases("frijoles", "frijoles")
+
+
+def ing_repollo() -> VegetalFruta:
+    """Crea un repollo."""
+    return VegetalFruta("repollo", "repollo")
+
+
+def ing_chicharron() -> Proteina:
+    """Crea chicharrón."""
+    return Proteina("chicharron", "chicharron")
+
+
+def ing_pico_gallo() -> VegetalFruta:
+    """Crea pico de gallo."""
+    return VegetalFruta("pico_gallo", "pico_gallo")
+
+
+def ing_platano() -> PapaFreir:
+    """Crea un plátano para freír."""
+    return PapaFreir("platano", "platano")
+
+
+def ing_tortilla() -> PanesYBases:
+    """Crea una tortilla lista."""
+    return PanesYBases("tortilla", "tortilla")
+
+
+def ing_cebolla() -> VegetalFruta:
+    """Crea una cebolla."""
+    return VegetalFruta("cebolla", "cebolla")
+
+
+def ing_alitas() -> Proteina:
+    """Crea unas alitas."""
+    return Proteina("alitas", "alitas")
+
+
+def ing_salchichon() -> Proteina:
+    """Crea salchichón."""
+    return Proteina("salchichon", "salchichon")
+
+
+def ing_queso() -> PanesYBases:
+    """Crea queso listo."""
 ESCENARIOS: List[Dict] = [
     {
-        "nombre": "Cocina de prueba",
-        "tema": "Mapa técnico para probar layout, estaciones y órdenes.",
+        "nombre": "McDonald's",
+        "tema": "Comida rápida: hamburguesas, papas y combos.",
         "fondo": "mcdonalds",
-        "tiempo": 120,
+        "tiempo": 130,
         "layout": [
             "##############",
-            "#a.b.........#",
+            "#a.b.c.d.....#",
             "#............#",
             "#..T.....S...#",
             "#............#",
@@ -933,12 +996,93 @@ ESCENARIOS: List[Dict] = [
             "#............#",
             "##############",
         ],
-        "despensas": {"a": ing_pan(), "b": ing_carne()},
-        "recetas": [("Hamburguesa simple", ["pan:listo", "carne:cocinado"])],
-        "max_ordenes": 2,
-        "intervalo": 9.0,
-    }
+        "despensas": {
+            "a": ing_pan(),
+            "b": ing_carne(),
+            "c": ing_lechuga(),
+            "d": ing_papas(),
+        },
+        "recetas": [
+            ("Papas fritas", ["papas:frito"]),
+            ("Hamburguesa simple", ["pan:listo", "carne:cocinado"]),
+            ("Hamburguesa deluxe", ["pan:listo", "carne:cocinado", "lechuga:picado"]),
+            ("Combo Mc", ["pan:listo", "carne:cocinado", "papas:frito"]),
+        ],
+        "max_ordenes": 3,
+        "intervalo": 8.0,
+    },
+    {
+        "nombre": "Soda El Cachetón",
+        "tema": "Comida tica: gallo pinto, casado, chifrijo y patacones.",
+        "fondo": "cacheton",
+        "tiempo": 150,
+        "layout": [
+            "##############",
+            "#a..b.....c..#",
+            "#..####......#",
+            "#..T..P..S...#",
+            "#............#",
+            "#d.....F...E.#",
+            "#..####......#",
+            "#e..1....2.f.#",
+            "#............#",
+            "##############",
+        ],
+        "despensas": {
+            "a": ing_arroz(),
+            "b": ing_frijoles(),
+            "c": ing_pollo(),
+            "d": ing_repollo(),
+            "e": ing_chicharron(),
+            "f": ing_pico_gallo(),
+        },
+        "recetas": [
+            ("Gallo pinto", ["arroz:listo", "frijoles:listo"]),
+            ("Casado Cachetón", ["arroz:listo", "pollo:cocinado", "repollo:picado"]),
+            ("Chifrijo", ["frijoles:listo", "chicharron:cocinado", "pico_gallo:picado"]),
+            ("Plato tico", ["arroz:listo", "frijoles:listo", "pollo:cocinado", "repollo:picado"]),
+        ],
+        "max_ordenes": 4,
+        "intervalo": 7.0,
+    },
+    {
+        "nombre": "Bar La Nave",
+        "tema": "Bocas de bar: nachos, alitas, picadas y hamburguesas.",
+        "fondo": "nave",
+        "tiempo": 170,
+        "layout": [
+            "##############",
+            "#a....#...gb.#",
+            "#..T..#..S...#",
+            "#.....#......#",
+            "#..1..P..2...#",
+            "#.....#..F...#",
+            "#c....#....dE#",
+            "#..e.....f...#",
+            "#............#",
+            "##############",
+        ],
+        "despensas": {
+            "a": ing_tortilla(),
+            "b": ing_carne(),
+            "c": ing_tomate(),
+            "d": ing_cebolla(),
+            "e": ing_alitas(),
+            "f": ing_papas(),
+            "g": ing_pan(),
+        },
+        "recetas": [
+            ("Nachos La Nave", ["tortilla:listo", "carne:cocinado", "tomate:picado"]),
+            ("Hamburguesa nocturna", ["pan:listo", "carne:cocinado", "cebolla:picado"]),
+            ("Alitas con papas", ["alitas:cocinado", "papas:frito"]),
+            ("Picada Nave", ["carne:cocinado", "papas:frito", "cebolla:picado"]),
+        ],
+        "max_ordenes": 4,
+        "intervalo": 6.0,
+    },
 ]
+
+# Juego Principal
 
 
 # Carga centralizada de imágenes obligatorias para las versiones intermedias.
@@ -995,16 +1139,22 @@ def cargar_assets_juego() -> Dict[str, Dict[str, pygame.Surface]]:
 
 
 class Game:
-    """Partida directa sobre la clase Cocina."""
+    """Partida directa con tres escenarios seleccionables por teclado."""
 
     def __init__(self) -> None:
         pygame.init()
-        pygame.display.set_caption("Crazy Snack Rush - cocina")
+        pygame.display.set_caption("Crazy Snack Rush - tres escenarios")
         self.screen = pygame.display.set_mode((WIDTH, HEIGHT))
         self.clock = pygame.time.Clock()
         self.running = True
         self.assets = cargar_assets_juego()
-        self.cocina = Cocina(ESCENARIOS[0])
+        self.indice_escenario = 0
+        self.cocina = Cocina(ESCENARIOS[self.indice_escenario])
+        self.chef_activo = 0
+
+    def iniciar(self, indice: int) -> None:
+        self.indice_escenario = indice
+        self.cocina = Cocina(ESCENARIOS[indice])
         self.chef_activo = 0
 
     def manejar_eventos(self) -> None:
@@ -1022,8 +1172,11 @@ class Game:
                 elif event.key == pygame.K_q:
                     self.cocina.mensaje = self.cocina.chefs[self.chef_activo].descartar()
                 elif event.key == pygame.K_r:
-                    self.cocina = Cocina(ESCENARIOS[0])
-                    self.chef_activo = 0
+                    self.iniciar(self.indice_escenario)
+                elif event.key in (pygame.K_1, pygame.K_2, pygame.K_3):
+                    nuevo = int(event.unicode) - 1
+                    if 0 <= nuevo < len(ESCENARIOS):
+                        self.iniciar(nuevo)
 
     def mover(self, dt: float) -> None:
         keys = pygame.key.get_pressed()
@@ -1059,10 +1212,11 @@ class Game:
             chef.dibujar(self.screen, self.assets["chefs"], index == self.chef_activo)
 
         draw_text(self.screen, self.cocina.nombre, UI_X, 75, 26, BLACK, True)
-        draw_text(self.screen, "Tiempo: " + formato_tiempo(self.cocina.tiempo_restante), UI_X, 115, 22, RED, True)
-        draw_text(self.screen, "Puntos: " + str(self.cocina.puntos), UI_X, 150, 22, BLUE, True)
-        draw_text(self.screen, "Órdenes:", UI_X, 205, 22, BLACK, True)
-        y = 240
+        draw_text(self.screen, "1 McDonald's | 2 Cachetón | 3 La Nave", UI_X, 112, 16, DARK, True)
+        draw_text(self.screen, "Tiempo: " + formato_tiempo(self.cocina.tiempo_restante), UI_X, 150, 22, RED, True)
+        draw_text(self.screen, "Puntos: " + str(self.cocina.puntos), UI_X, 185, 22, BLUE, True)
+        draw_text(self.screen, "Órdenes:", UI_X, 235, 22, BLACK, True)
+        y = 270
         for receta in self.cocina.ordenes[:4]:
             draw_text(self.screen, receta.nombre, UI_X, y, 18, BLACK, True)
             draw_text(self.screen, receta.texto_ingredientes(), UI_X, y + 24, 15, DARK)
