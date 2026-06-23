@@ -234,71 +234,222 @@ def formato_tiempo(segundos: float) -> str:
     """Convierte segundos al formato minutos y segundos."""
     segundos = max(0, int(segundos))
     return f"{segundos // 60}:{segundos % 60:02d}"
+# Clases Ingredientes
+
+class Ingrediente:
+    """Clase base. Representa cualquier ingrediente que puede sostener un chef."""
+
+    def __init__(self, nombre: str, categoria: str, estado: str = "crudo",
+                 estacion_requerida: Optional[str] = None, tiempo_preparacion: float = 0,
+                 asset_key: Optional[str] = None) -> None:
+        """Guarda los datos básicos de un ingrediente."""
+        self.nombre = nombre
+        self.categoria = categoria
+        self.estado = estado
+        self.estacion_requerida = estacion_requerida
+        self.tiempo_preparacion = tiempo_preparacion
+        self.asset_key = asset_key or nombre
+
+    def preparar(self) -> None:
+        """Polimorfismo: cada subclase cambia su estado de forma distinta."""
+        self.estado = "preparado"
+
+    def esta_listo_para_plato(self) -> bool:
+        """Revisa si el ingrediente puede ponerse en un plato."""
+        return self.estado in ["listo", "picado", "cocinado", "frito"]
+
+    def esta_arruinado(self) -> bool:
+        """Revisa si el ingrediente está quemado."""
+        return self.estado == "quemado"
+
+    def clave_receta(self) -> str:
+        """Crea el texto usado para comparar recetas."""
+        return f"{self.nombre}:{self.estado}"
+
+    def copiar(self) -> "Ingrediente":
+        """Crea otra copia igual del ingrediente."""
+        return Ingrediente(self.nombre, self.categoria, self.estado,
+                           self.estacion_requerida, self.tiempo_preparacion,
+                           self.asset_key)
+
+    def __str__(self) -> str:
+        """Devuelve el nombre y estado como texto."""
+        return f"{self.nombre} ({self.estado})"
 
 
-# Carga centralizada de imágenes (solo commits)
-cocina_assets_actuales: Dict[str, Dict[str, pygame.Surface]] = {}
+class VegetalFruta(Ingrediente):
+    """Ingrediente que se prepara en la tabla."""
+
+    def __init__(self, nombre: str, asset_key: Optional[str] = None) -> None:
+        """Crea un vegetal o una fruta cruda."""
+        super().__init__(nombre, "vegetal_fruta", "crudo", "tabla", 3.0, asset_key)
+
+    def preparar(self) -> None:
+        """Deja el ingrediente picado."""
+        self.estado = "picado"
+
+    def copiar(self) -> "VegetalFruta":
+        """Crea otra copia igual del ingrediente."""
+        nuevo = VegetalFruta(self.nombre, self.asset_key)
+        nuevo.estado = self.estado
+        return nuevo
 
 
-def cargar_assets_juego() -> Dict[str, Dict[str, pygame.Surface]]:
-    """Carga todos los assets necesarios. Si falta uno, el juego se detiene."""
-    global cocina_assets_actuales
-    assets: Dict[str, Dict[str, pygame.Surface]] = {
-        "ui": {},
-        "backgrounds": {},
-        "chefs": {},
-        "stations": {},
-        "ingredients": {},
-    }
-    validar_archivos_assets()
+class PanesYBases(Ingrediente):
+    """Ingrediente que ya sale listo de la despensa."""
 
-    ui_sizes = {
-        "inicio_fondo": (WIDTH, HEIGHT),
-        "inicio_titulo": (760, 160),
-        "boton_empezar": (520, 84),
-        "boton_salir": (520, 84),
-        "boton_about": (520, 84),
-        "mapas_fondo": (WIDTH, HEIGHT),
-        "mapas_titulo": (720, 120),
-        "mapa_mcdonalds": (790, 96),
-        "mapa_cacheton": (790, 96),
-        "mapa_nave": (790, 96),
-        "about_fondo": (WIDTH, HEIGHT),
-        "about_titulo": (640, 120),
-        "about_panel": (900, 430),
-        "boton_volver": (250, 58),
-    }
-    for key, size in ui_sizes.items():
-        assets["ui"][key] = load_image(ASSET_PATHS["ui"][key], size)
-    assets["ui"]["selector"] = load_selector_image(ASSET_PATHS["ui"]["selector"])
+    def __init__(self, nombre: str, asset_key: Optional[str] = None) -> None:
+        """Crea un pan o una base lista."""
+        super().__init__(nombre, "pan_base", "listo", None, 0, asset_key)
 
-    for name, rel_path in ASSET_PATHS["backgrounds"].items():
-        assets["backgrounds"][name] = load_image(rel_path, (WIDTH, HEIGHT))
+    def preparar(self) -> None:
+        """Mantiene el ingrediente listo."""
+        self.estado = "listo"
 
-    chef_size = (TILE - 14, TILE - 14)
-    for key, rel_path in ASSET_PATHS["chefs"].items():
-        assets["chefs"][key] = load_image(rel_path, chef_size)
+    def copiar(self) -> "PanesYBases":
+        """Crea otra copia igual del ingrediente."""
+        nuevo = PanesYBases(self.nombre, self.asset_key)
+        nuevo.estado = self.estado
+        return nuevo
 
-    for key, rel_path in ASSET_PATHS["stations"].items():
-        assets["stations"][key] = load_image(rel_path, (TILE, TILE))
 
-    for key, rel_path in ASSET_PATHS["ingredients"].items():
-        assets["ingredients"][key] = load_image(rel_path, (30, 30))
+class Proteina(Ingrediente):
+    """Ingrediente que se cocina y puede quemarse."""
 
-    cocina_assets_actuales = assets
-    return assets
+    def __init__(self, nombre: str, asset_key: Optional[str] = None) -> None:
+        """Crea una proteína cruda."""
+        super().__init__(nombre, "proteina", "crudo", "cocina", 5.0, asset_key)
+
+    def preparar(self) -> None:
+        """Cocina la proteína."""
+        self.estado = "cocinado"
+
+    def quemar(self) -> None:
+        """Marca la proteína como quemada."""
+        self.estado = "quemado"
+
+    def copiar(self) -> "Proteina":
+        """Crea otra copia igual de la proteína."""
+        nuevo = Proteina(self.nombre, self.asset_key)
+        nuevo.estado = self.estado
+        return nuevo
+
+
+class PapaFreir(Ingrediente):
+    """Ingrediente que se prepara en la freidora."""
+
+    def __init__(self, nombre: str = "papas", asset_key: Optional[str] = None) -> None:
+        """Crea una papa o alimento para freír."""
+        super().__init__(nombre, "papa_freir", "crudo", "freidora", 4.0, asset_key or nombre)
+
+    def preparar(self) -> None:
+        """Fríe el ingrediente."""
+        self.estado = "frito"
+
+    def quemar(self) -> None:
+        """Marca el ingrediente como quemado."""
+        self.estado = "quemado"
+
+    def copiar(self) -> "PapaFreir":
+        """Crea otra copia igual del ingrediente."""
+        nuevo = PapaFreir(self.nombre, self.asset_key)
+        nuevo.estado = self.estado
+        return nuevo
+
+# Platos
+
+class Plato:
+    """Contenedor de ingredientes. El jugador debe llenar un plato y luego entregarlo."""
+
+    def __init__(self, capacidad: int = 6) -> None:
+        """Crea un plato vacío con un límite de ingredientes."""
+        self.capacidad = capacidad
+        self.ingredientes: List[Ingrediente] = []
+
+    def agregar(self, ingrediente: Ingrediente) -> bool:
+        """Agrega un ingrediente si todavía hay espacio."""
+        if len(self.ingredientes) >= self.capacidad:
+            return False
+        self.ingredientes.append(ingrediente)
+        return True
+
+    def esta_vacio(self) -> bool:
+        """Revisa si el plato no tiene ingredientes."""
+        return len(self.ingredientes) == 0
+
+    def claves(self) -> List[str]:
+        """Devuelve las claves ordenadas de sus ingredientes."""
+        return sorted(ingrediente.clave_receta() for ingrediente in self.ingredientes)
+
+    def descripcion(self) -> str:
+        """Devuelve una lista simple de lo que contiene."""
+        if not self.ingredientes:
+            return "plato vacío"
+        return ", ".join(f"{i.nombre} {i.estado}" for i in self.ingredientes)
+
+    def __str__(self) -> str:
+        """Devuelve el plato como texto."""
+        return "Plato: " + self.descripcion()
+
+
+class Receta:
+    """Receta activa que tiene ingredientes, puntos y tiempo máximo."""
+
+    def __init__(self, nombre: str, ingredientes_requeridos: List[str]) -> None:
+        """Crea una orden con tiempo y puntos."""
+        self.nombre = nombre
+        self.ingredientes_requeridos = list(ingredientes_requeridos)
+        self.puntos_originales = len(ingredientes_requeridos) * 100
+        self.puntos_receta = self.puntos_originales
+        self.max_time_receta = 18 + len(ingredientes_requeridos) * 12
+        self.tiempo_restante = float(self.max_time_receta)
+
+    def actualizar_tiempo(self, dt: float) -> bool:
+        """
+        Reduce el tiempo. Cuando llega a cero, baja la puntuación a la mitad.
+        Retorna True si la receta debe eliminarse porque llegó a cero puntos.
+        """
+        self.tiempo_restante -= dt
+        if self.tiempo_restante <= 0:
+            self.puntos_receta //= 2
+            self.tiempo_restante = float(self.max_time_receta)
+        return self.puntos_receta <= 0
+
+    def comparar_plato(self, plato: Plato) -> bool:
+        """Revisa si un plato cumple esta receta."""
+        return plato.claves() == sorted(self.ingredientes_requeridos)
+
+    def texto_ingredientes(self) -> str:
+        """Devuelve los ingredientes de la receta como texto."""
+        partes = []
+        for clave in self.ingredientes_requeridos:
+            nombre, estado = clave.split(":")
+            partes.append(f"{nombre} {estado}")
+        return ", ".join(partes)
+
+    def copiar(self) -> "Receta":
+        """Crea una receta nueva con los mismos datos."""
+        return Receta(self.nombre, list(self.ingredientes_requeridos))
+
+
+ItemSostenido = Union[Ingrediente, Plato]
 
 
 class Game:
-    """Pantalla inicial usando assets obligatorios."""
+    """Demostración de ingredientes, platos y recetas."""
 
     def __init__(self) -> None:
         pygame.init()
-        pygame.display.set_caption("Crazy Snack Rush - assets obligatorios")
+        pygame.display.set_caption("Crazy Snack Rush - recetas")
         self.screen = pygame.display.set_mode((WIDTH, HEIGHT))
         self.clock = pygame.time.Clock()
         self.running = True
-        self.assets = cargar_assets_juego()
+        self.plato = Plato()
+        carne = Proteina("carne", "carne")
+        carne.preparar()
+        self.plato.agregar(PanesYBases("pan", "pan"))
+        self.plato.agregar(carne)
+        self.receta = Receta("Hamburguesa simple", ["pan:listo", "carne:cocinado"])
 
     def ejecutar(self) -> None:
         while self.running:
@@ -309,10 +460,13 @@ class Game:
                 elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                     self.running = False
 
-            self.screen.blit(self.assets["ui"]["inicio_fondo"], (0, 0))
-            self.screen.blit(self.assets["ui"]["inicio_titulo"], ((WIDTH - 760) // 2, 90))
-            self.screen.blit(self.assets["ui"]["boton_empezar"], ((WIDTH - 520) // 2, 335))
-            draw_text(self.screen, "Carga obligatoria de imágenes activa", WIDTH // 2, 470, 26, WHITE, True, centered=True)
+            self.screen.fill((245, 240, 225))
+            draw_text(self.screen, "Sistema de ingredientes y recetas", 80, 90, 34, BLACK, True)
+            draw_text(self.screen, "Receta: " + self.receta.nombre, 80, 160, 26, BLACK, True)
+            draw_text(self.screen, "Requiere: " + self.receta.texto_ingredientes(), 80, 210, 22, DARK)
+            draw_text(self.screen, "Plato armado: " + self.plato.descripcion(), 80, 270, 22, DARK)
+            resultado = "Correcto" if self.receta.comparar_plato(self.plato) else "Incorrecto"
+            draw_text(self.screen, "Resultado: " + resultado, 80, 330, 28, GREEN if resultado == "Correcto" else RED, True)
             pygame.display.flip()
         pygame.quit()
         sys.exit()
