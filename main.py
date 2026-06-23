@@ -667,9 +667,281 @@ def dibujar_plato(surface: pygame.Surface, plato: Plato, x: int, y: int, size: i
         mini = pygame.transform.smoothscale(icon, (15, 15))
         surface.blit(mini, (px, py))
 
+# Jugador
+
+class Chef:
+    """Chef controlable. Solo puede sostener un ingrediente o un plato a la vez."""
+
+    VEL = 200
+
+    def __init__(self, nombre: str, posicion: Tuple[int, int], asset_key: str) -> None:
+        """Crea un chef en una casilla del mapa."""
+        self.nombre = nombre
+        self.asset_key = asset_key
+        self.sosteniendo: Optional[ItemSostenido] = None
+        self.direccion = (0, 1)
+        self.ancho = TILE - 14
+        self.alto = TILE - 14
+        col, row = posicion
+        self.x = float(col * TILE + (TILE - self.ancho) / 2)
+        self.y = float(row * TILE + (TILE - self.alto) / 2)
+
+    def rect(self) -> pygame.Rect:
+        """Devuelve el rectángulo usado para choques."""
+        return pygame.Rect(int(self.x), int(self.y), self.ancho, self.alto)
+
+    def centro(self) -> Tuple[float, float]:
+        """Devuelve el centro del chef."""
+        return self.x + self.ancho / 2, self.y + self.alto / 2
+
+    def celda_actual(self) -> Tuple[int, int]:
+        """Devuelve la casilla donde está el chef."""
+        centro_x, centro_y = self.centro()
+        return int(centro_x // TILE), int(centro_y // TILE)
+
+    def posicion_frente(self) -> Tuple[int, int]:
+        """Devuelve la casilla que está frente al chef."""
+        col, row = self.celda_actual()
+        return col + self.direccion[0], row + self.direccion[1]
+
+    def interactuar(self, cocina: "Cocina") -> str:
+        """Usa la estación que está frente al chef."""
+        estacion = cocina.obtener_estacion_en(self.posicion_frente())
+        if estacion is None:
+            return "No hay estación enfrente."
+        return estacion.interactuar(cocina, self)
+
+    def descartar(self) -> str:
+        """Bota lo que el chef tiene en la mano."""
+        if self.sosteniendo is None:
+            return "No lleva nada."
+        self.sosteniendo = None
+        return "Descartó lo que llevaba."
+
+    def texto_mano(self) -> str:
+        """Devuelve un texto con lo que lleva el chef."""
+        if self.sosteniendo is None:
+            return "vacía"
+        if isinstance(self.sosteniendo, Plato):
+            return self.sosteniendo.descripcion()
+        return str(self.sosteniendo)
+
+    def dibujar(self, surface: pygame.Surface, assets: Dict[str, pygame.Surface], activo: bool) -> None:
+        """Dibuja al chef con el sprite de su dirección."""
+        x = GRID_X + int(self.x)
+        y = GRID_Y + int(self.y)
+        if activo:
+            pygame.draw.ellipse(surface, YELLOW, (x - 4, y + self.alto - 8, self.ancho + 8, 12))
+        nombres_direccion = {
+            (0, 1): "abajo",
+            (0, -1): "arriba",
+            (1, 0): "derecha",
+            (-1, 0): "izquierda",
+        }
+        direccion = nombres_direccion.get(self.direccion, "abajo")
+        surface.blit(assets[f"{self.asset_key}_{direccion}"], (x, y))
+        if activo:
+            pygame.draw.rect(surface, YELLOW, (x, y, self.ancho, self.alto), 3, border_radius=6)
+        if self.sosteniendo:
+            if isinstance(self.sosteniendo, Plato):
+                dibujar_plato(surface, self.sosteniendo, x + self.ancho - 24, y - 8, 30)
+            else:
+                icon = require_global_asset("ingredients", self.sosteniendo.asset_key)
+                mini = pygame.transform.smoothscale(icon, (28, 28))
+                surface.blit(mini, (x + self.ancho - 22, y - 9))
 
 
-# Carga centralizada de imágenes (commits)
+ 
+# Cocina
+
+class Cocina:
+    """Administra chefs, estaciones, recetas, tiempo, layout y puntos."""
+
+    def __init__(self, definicion: Dict) -> None:
+        """Crea una partida usando los datos de un restaurante."""
+        self.nombre = definicion["nombre"]
+        self.tema = definicion["tema"]
+        self.background_key = definicion["fondo"]
+        self.tiempo_total = int(definicion["tiempo"])
+        self.tiempo_restante = float(self.tiempo_total)
+        self.recetas_base = [Receta(nombre, ingredientes) for nombre, ingredientes in definicion["recetas"]]
+        self.max_ordenes = definicion.get("max_ordenes", 3)
+        self.spawn_interval = float(definicion.get("intervalo", 8.0))
+        self.spawn_timer = 0.0
+        self.chefs: List[Chef] = []
+        self.estaciones: List[Estacion] = []
+        self.ordenes: List[Receta] = []
+        self.paredes = set()
+        self.puntos = 0
+        self.mensaje = "Tome ingredientes, prepárelos, póngalos en un plato y entréguelo."
+        self.juego_terminado = False
+        self.mensajes_flotantes: List[Dict] = []
+        self._construir_desde_layout(definicion["layout"], definicion["despensas"])
+        self.ordenes.append(self.generar_receta())
+
+    def _construir_desde_layout(self, layout: List[str], despensas: Dict[str, Ingrediente]) -> None:
+        """Crea paredes, estaciones y chefs leyendo el mapa."""
+        posiciones_chef: List[Tuple[int, int]] = []
+        for row, line in enumerate(layout):
+            if len(line) != GRID_COLS:
+                raise ValueError(f"El layout de {self.nombre} tiene una fila con largo incorrecto: {line}")
+            for col, ch in enumerate(line):
+                pos = (col, row)
+                if ch == "#":
+                    self.paredes.add(pos)
+                elif ch == "S":
+                    self.estaciones.append(EstacionTrabajo("Cocina", "cocina", pos, ["proteina"], True, 7.0))
+                elif ch == "T":
+                    self.estaciones.append(EstacionTrabajo("Tabla", "tabla", pos, ["vegetal_fruta"], False))
+                elif ch == "F":
+                    self.estaciones.append(EstacionTrabajo("Freidora", "freidora", pos, ["papa_freir"], True, 7.0))
+                elif ch == "E":
+                    self.estaciones.append(EstacionEntrega(pos))
+                elif ch == "P":
+                    self.estaciones.append(EstacionPlato(pos))
+                elif ch in ("1", "2"):
+                    posiciones_chef.append(pos)
+                elif ch in despensas:
+                    self.estaciones.append(Despensa(despensas[ch], pos))
+                elif ch == ".":
+                    pass
+                else:
+                    raise ValueError(f"Símbolo desconocido en layout: {ch}")
+
+        if len(posiciones_chef) < 2:
+            posiciones_chef = [(2, 8), (4, 8)]
+        self.chefs = [
+            Chef("Chef 1", posiciones_chef[0], "chef1"),
+            Chef("Chef 2", posiciones_chef[1], "chef2"),
+        ]
+
+    def generar_receta(self) -> Receta:
+        """Escoge una receta al azar y crea una copia."""
+        return random.choice(self.recetas_base).copiar()
+
+    def actualizar(self, dt: float) -> None:
+        """Actualiza el tiempo, estaciones, órdenes y mensajes."""
+        if self.juego_terminado:
+            return
+
+        self.tiempo_restante -= dt
+        if self.tiempo_restante <= 0:
+            self.tiempo_restante = 0
+            self.juego_terminado = True
+            self.mensaje = "Tiempo terminado."
+            return
+
+        for estacion in self.estaciones:
+            estacion.actualizar(dt)
+
+        for receta in list(self.ordenes):
+            debe_eliminarse = receta.actualizar_tiempo(dt)
+            if debe_eliminarse:
+                self.ordenes.remove(receta)
+                self.puntos = max(0, self.puntos - receta.puntos_originales)
+                self.mensaje = f"Orden perdida: {receta.nombre}. -{receta.puntos_originales}."
+                self.agregar_mensaje("-" + str(receta.puntos_originales), RED)
+
+        self.spawn_timer += dt
+        if self.spawn_timer >= self.spawn_interval:
+            self.spawn_timer = 0.0
+            if len(self.ordenes) < self.max_ordenes:
+                self.ordenes.append(self.generar_receta())
+
+        while len(self.ordenes) == 0:
+            self.ordenes.append(self.generar_receta())
+
+        for mensaje in self.mensajes_flotantes:
+            mensaje["t"] -= dt
+            mensaje["y"] -= 28 * dt
+        self.mensajes_flotantes = [m for m in self.mensajes_flotantes if m["t"] > 0]
+
+    def mover(self, chef: Chef, vx: float, vy: float) -> None:
+        """Movimiento continuo con colisiones, igual al proyecto de referencia."""
+        chef.x += vx
+        if self._colisiona(chef.rect(), chef):
+            chef.x -= vx
+
+        chef.y += vy
+        if self._colisiona(chef.rect(), chef):
+            chef.y -= vy
+
+        max_x = GRID_COLS * TILE - chef.ancho
+        max_y = GRID_ROWS * TILE - chef.alto
+        chef.x = max(0.0, min(chef.x, max_x))
+        chef.y = max(0.0, min(chef.y, max_y))
+
+    def _colisiona(self, rect: pygame.Rect, chef_actual: Chef) -> bool:
+        """Revisa si el chef toca una pared, estación u otro chef."""
+        posiciones_bloqueadas = set(self.paredes)
+        posiciones_bloqueadas.update(estacion.posicion for estacion in self.estaciones)
+        for col, row in posiciones_bloqueadas:
+            if rect.colliderect(pygame.Rect(col * TILE, row * TILE, TILE, TILE)):
+                return True
+
+        for chef in self.chefs:
+            if chef is not chef_actual and rect.colliderect(chef.rect()):
+                return True
+        return False
+
+    def obtener_estacion_en(self, posicion: Tuple[int, int]) -> Optional[Estacion]:
+        """Busca una estación en una casilla."""
+        for estacion in self.estaciones:
+            if estacion.posicion == posicion:
+                return estacion
+        return None
+
+    def agregar_mensaje(self, texto: str, color: Tuple[int, int, int]) -> None:
+        """Agrega un texto flotante a la pantalla."""
+        self.mensajes_flotantes.append({"texto": texto, "color": color, "x": GRID_X + GRID_COLS * TILE // 2, "y": GRID_Y + 55, "t": 1.4})
+
+# Ingredientes
+
+
+# Ingredientes del primer restaurante.
+def ing_pan() -> PanesYBases:
+    return PanesYBases("pan", "pan")
+
+
+def ing_carne() -> Proteina:
+    return Proteina("carne", "carne")
+
+
+def ing_lechuga() -> VegetalFruta:
+    return VegetalFruta("lechuga", "lechuga")
+
+
+def ing_papas() -> PapaFreir:
+    return PapaFreir("papas", "papas")
+
+
+ESCENARIOS: List[Dict] = [
+    {
+        "nombre": "Cocina de prueba",
+        "tema": "Mapa técnico para probar layout, estaciones y órdenes.",
+        "fondo": "mcdonalds",
+        "tiempo": 120,
+        "layout": [
+            "##############",
+            "#a.b.........#",
+            "#............#",
+            "#..T.....S...#",
+            "#............#",
+            "#..P.....F..E#",
+            "#............#",
+            "#....1..2....#",
+            "#............#",
+            "##############",
+        ],
+        "despensas": {"a": ing_pan(), "b": ing_carne()},
+        "recetas": [("Hamburguesa simple", ["pan:listo", "carne:cocinado"])],
+        "max_ordenes": 2,
+        "intervalo": 9.0,
+    }
+]
+
+
+# Carga centralizada de imágenes obligatorias para las versiones intermedias.
 cocina_assets_actuales: Dict[str, Dict[str, pygame.Surface]] = {}
 
 
@@ -723,42 +995,90 @@ def cargar_assets_juego() -> Dict[str, Dict[str, pygame.Surface]]:
 
 
 class Game:
-    """Demostración de estaciones de cocina."""
+    """Partida directa sobre la clase Cocina."""
 
     def __init__(self) -> None:
         pygame.init()
-        pygame.display.set_caption("Crazy Snack Rush - estaciones")
+        pygame.display.set_caption("Crazy Snack Rush - cocina")
         self.screen = pygame.display.set_mode((WIDTH, HEIGHT))
         self.clock = pygame.time.Clock()
         self.running = True
         self.assets = cargar_assets_juego()
-        self.estaciones = [
-            Despensa(PanesYBases("pan", "pan"), (1, 1)),
-            Despensa(Proteina("carne", "carne"), (2, 1)),
-            EstacionTrabajo("Tabla", "tabla", (4, 2), ["vegetal_fruta"]),
-            EstacionTrabajo("Cocina", "cocina", (6, 2), ["proteina"], True, 7.0),
-            EstacionTrabajo("Freidora", "freidora", (8, 2), ["papa_freir"], True, 7.0),
-            EstacionPlato((10, 3)),
-            EstacionEntrega((12, 3)),
-        ]
+        self.cocina = Cocina(ESCENARIOS[0])
+        self.chef_activo = 0
+
+    def manejar_eventos(self) -> None:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                self.running = False
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
+                    self.running = False
+                elif event.key == pygame.K_TAB:
+                    self.chef_activo = 1 - self.chef_activo
+                elif event.key == pygame.K_SPACE:
+                    chef = self.cocina.chefs[self.chef_activo]
+                    self.cocina.mensaje = chef.interactuar(self.cocina)
+                elif event.key == pygame.K_q:
+                    self.cocina.mensaje = self.cocina.chefs[self.chef_activo].descartar()
+                elif event.key == pygame.K_r:
+                    self.cocina = Cocina(ESCENARIOS[0])
+                    self.chef_activo = 0
+
+    def mover(self, dt: float) -> None:
+        keys = pygame.key.get_pressed()
+        chef = self.cocina.chefs[self.chef_activo]
+        vx = 0
+        vy = 0
+        if keys[pygame.K_w] or keys[pygame.K_UP]:
+            vy -= 1
+        if keys[pygame.K_s] or keys[pygame.K_DOWN]:
+            vy += 1
+        if keys[pygame.K_a] or keys[pygame.K_LEFT]:
+            vx -= 1
+        if keys[pygame.K_d] or keys[pygame.K_RIGHT]:
+            vx += 1
+        if vx or vy:
+            mag = math.hypot(vx, vy)
+            ux, uy = vx / mag, vy / mag
+            if abs(vx) > abs(vy):
+                chef.direccion = (1 if vx > 0 else -1, 0)
+            else:
+                chef.direccion = (0, 1 if vy > 0 else -1)
+            self.cocina.mover(chef, ux * Chef.VEL * dt, uy * Chef.VEL * dt)
+
+    def dibujar(self) -> None:
+        self.screen.blit(self.assets["backgrounds"][self.cocina.background_key], (0, 0))
+        for col, row in self.cocina.paredes:
+            x, y = grid_to_pixel((col, row))
+            pygame.draw.rect(self.screen, WALL, (x, y, TILE, TILE), border_radius=6)
+            pygame.draw.rect(self.screen, BLACK, (x, y, TILE, TILE), 2, border_radius=6)
+        for estacion in self.cocina.estaciones:
+            estacion.dibujar(self.screen, self.assets["stations"])
+        for index, chef in enumerate(self.cocina.chefs):
+            chef.dibujar(self.screen, self.assets["chefs"], index == self.chef_activo)
+
+        draw_text(self.screen, self.cocina.nombre, UI_X, 75, 26, BLACK, True)
+        draw_text(self.screen, "Tiempo: " + formato_tiempo(self.cocina.tiempo_restante), UI_X, 115, 22, RED, True)
+        draw_text(self.screen, "Puntos: " + str(self.cocina.puntos), UI_X, 150, 22, BLUE, True)
+        draw_text(self.screen, "Órdenes:", UI_X, 205, 22, BLACK, True)
+        y = 240
+        for receta in self.cocina.ordenes[:4]:
+            draw_text(self.screen, receta.nombre, UI_X, y, 18, BLACK, True)
+            draw_text(self.screen, receta.texto_ingredientes(), UI_X, y + 24, 15, DARK)
+            y += 70
+        draw_wrapped_text(self.screen, self.cocina.mensaje, UI_X, 610, WIDTH - UI_X - 40, 18, BLACK)
+        pygame.display.flip()
 
     def ejecutar(self) -> None:
         while self.running:
             dt = self.clock.tick(FPS) / 1000.0
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    self.running = False
-                elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-                    self.running = False
-
-            for estacion in self.estaciones:
-                estacion.actualizar(dt)
-
-            self.screen.blit(self.assets["backgrounds"]["mcdonalds"], (0, 0))
-            draw_text(self.screen, "Estaciones: despensa, tabla, cocina, freidora, plato y entrega", 50, 45, 24, BLACK, True)
-            for estacion in self.estaciones:
-                estacion.dibujar(self.screen, self.assets["stations"])
-            pygame.display.flip()
+            dt = min(dt, 0.05)
+            self.manejar_eventos()
+            if not self.cocina.juego_terminado:
+                self.mover(dt)
+                self.cocina.actualizar(dt)
+            self.dibujar()
         pygame.quit()
         sys.exit()
 
