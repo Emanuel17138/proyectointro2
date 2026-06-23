@@ -434,39 +434,330 @@ class Receta:
 
 ItemSostenido = Union[Ingrediente, Plato]
 
+# Estaciones
+
+class Estacion:
+    """Clase base para todas las estaciones."""
+
+    def __init__(self, nombre: str, tipo: str, posicion: Tuple[int, int]) -> None:
+        """Crea una estación en una casilla."""
+        self.nombre = nombre
+        self.tipo = tipo
+        self.posicion = posicion
+        self.ingredientes_aceptados: List[str] = []
+
+    def interactuar(self, cocina: "Cocina", chef: "Chef") -> str:
+        """Responde cuando un chef usa la estación."""
+        return "No se puede usar esta estación."
+
+    def actualizar(self, dt: float) -> None:
+        """Actualiza la estación con el paso del tiempo."""
+        pass
+
+    def dibujar(self, surface: pygame.Surface, assets: Dict[str, pygame.Surface]) -> None:
+        """Dibuja la estación sin poner texto encima."""
+        x, y = grid_to_pixel(self.posicion)
+        surface.blit(require_asset(assets, self.tipo, "stations"), (x, y))
+
+
+class Despensa(Estacion):
+    """Entrega ingredientes infinitos, uno a la vez."""
+
+    def __init__(self, ingrediente_base: Ingrediente, posicion: Tuple[int, int]) -> None:
+        """Crea una despensa para un ingrediente."""
+        super().__init__(f"Desp. {ingrediente_base.nombre}", "despensa", posicion)
+        self.ingrediente_base = ingrediente_base
+
+    def interactuar(self, cocina: "Cocina", chef: "Chef") -> str:
+        """Entrega un ingrediente si el chef tiene la mano vacía."""
+        if chef.sosteniendo is not None:
+            return "Ya tiene algo en la mano."
+        chef.sosteniendo = self.ingrediente_base.copiar()
+        return f"Tomó {chef.sosteniendo.nombre}."
+
+    def dibujar(self, surface: pygame.Surface, assets: Dict[str, pygame.Surface]) -> None:
+        """Dibuja la despensa y el ingrediente que entrega."""
+        super().dibujar(surface, assets)
+        x, y = grid_to_pixel(self.posicion)
+        icon = require_global_asset("ingredients", self.ingrediente_base.asset_key)
+        surface.blit(icon, (x + 13, y + 7))
+
+
+class EstacionTrabajo(Estacion):
+    """Tabla, cocina o freidora. Procesa ingredientes con tiempo."""
+
+    def __init__(self, nombre: str, tipo: str, posicion: Tuple[int, int], aceptados: List[str],
+                 permite_quemarse: bool = False, tiempo_para_quemarse: float = 7.0) -> None:
+        """Crea una estación que prepara ingredientes."""
+        super().__init__(nombre, tipo, posicion)
+        self.ingredientes_aceptados = aceptados
+        self.ingrediente: Optional[Ingrediente] = None
+        self.progreso = 0.0
+        self.procesando = False
+        self.terminado = False
+        self.permite_quemarse = permite_quemarse
+        self.tiempo_para_quemarse = tiempo_para_quemarse
+        self.tiempo_despues_de_listo = 0.0
+
+    def interactuar(self, cocina: "Cocina", chef: "Chef") -> str:
+        """Coloca o recoge un ingrediente de la estación."""
+        if self.ingrediente is None:
+            if chef.sosteniendo is None:
+                return "La estación está vacía."
+            if isinstance(chef.sosteniendo, Plato):
+                return "Aquí solo se preparan ingredientes, no platos."
+            if chef.sosteniendo.esta_listo_para_plato():
+                return f"{chef.sosteniendo.nombre} ya está listo. Póngalo en un plato."
+            if chef.sosteniendo.categoria not in self.ingredientes_aceptados:
+                return f"{chef.sosteniendo.nombre} no sirve para {self.nombre}."
+            if chef.sosteniendo.estacion_requerida != self.tipo:
+                return f"{chef.sosteniendo.nombre} no ocupa esta estación."
+            self.ingrediente = chef.sosteniendo
+            chef.sosteniendo = None
+            self.progreso = 0.0
+            self.procesando = True
+            self.terminado = False
+            self.tiempo_despues_de_listo = 0.0
+            return f"Preparando {self.ingrediente.nombre}."
+
+        if chef.sosteniendo is None:
+            if not self.terminado:
+                return "Todavía se está preparando."
+            chef.sosteniendo = self.ingrediente
+            nombre = chef.sosteniendo.nombre
+            self.ingrediente = None
+            self.progreso = 0.0
+            self.procesando = False
+            self.terminado = False
+            self.tiempo_despues_de_listo = 0.0
+            return f"Recogió {nombre}."
+
+        return "Tiene que tener la mano vacía para recoger."
+
+    def actualizar(self, dt: float) -> None:
+        """Avanza la preparación y quema si tarda demasiado."""
+        if self.ingrediente is None:
+            return
+
+        if self.procesando and not self.terminado:
+            self.progreso += dt
+            if self.progreso >= self.ingrediente.tiempo_preparacion:
+                self.ingrediente.preparar()
+                self.procesando = False
+                self.terminado = True
+                self.tiempo_despues_de_listo = 0.0
+                return
+
+        if self.terminado and self.permite_quemarse and not self.ingrediente.esta_arruinado():
+            self.tiempo_despues_de_listo += dt
+            if self.tiempo_despues_de_listo >= self.tiempo_para_quemarse:
+                if hasattr(self.ingrediente, "quemar"):
+                    self.ingrediente.quemar()
+                self.terminado = True
+
+    def dibujar(self, surface: pygame.Surface, assets: Dict[str, pygame.Surface]) -> None:
+        """Dibuja la estación, el ingrediente y su avance."""
+        super().dibujar(surface, assets)
+        x, y = grid_to_pixel(self.posicion)
+        if self.ingrediente:
+            icon = require_global_asset("ingredients", self.ingrediente.asset_key)
+            surface.blit(icon, (x + 13, y + 7))
+
+            if not self.terminado:
+                ratio = min(1.0, self.progreso / max(0.01, self.ingrediente.tiempo_preparacion))
+                pygame.draw.rect(surface, BLACK, (x + 5, y + 5, TILE - 10, 7), 1)
+                pygame.draw.rect(surface, GREEN, (x + 6, y + 6, int((TILE - 12) * ratio), 5))
+            else:
+                color = RED if self.ingrediente.estado == "quemado" else GREEN
+                pygame.draw.circle(surface, color, (x + TILE - 8, y + 8), 6)
+
+
+class EstacionPlato(Estacion):
+    """Mesa con plato. Aquí se ponen ingredientes preparados antes de entregarlos."""
+
+    def __init__(self, posicion: Tuple[int, int], capacidad: int = 6) -> None:
+        """Crea una mesa con un plato vacío."""
+        super().__init__("Plato", "plato", posicion)
+        self.plato = Plato(capacidad)
+
+    def interactuar(self, cocina: "Cocina", chef: "Chef") -> str:
+        """Permite poner ingredientes o recoger el plato."""
+        if chef.sosteniendo is None:
+            if self.plato.esta_vacio():
+                return "Plato vacío. Ponga ingredientes preparados aquí."
+            chef.sosteniendo = self.plato
+            self.plato = Plato(self.plato.capacidad)
+            return "Tomó el plato armado. Llévelo a Entrega."
+
+        if isinstance(chef.sosteniendo, Ingrediente):
+            ingrediente = chef.sosteniendo
+            if ingrediente.esta_arruinado():
+                chef.sosteniendo = None
+                return "Ingrediente quemado descartado."
+            if not ingrediente.esta_listo_para_plato():
+                return "Ese ingrediente todavía no está preparado."
+            if not self.plato.agregar(ingrediente):
+                return "El plato está lleno."
+            chef.sosteniendo = None
+            return f"Puso {ingrediente.nombre} en el plato."
+
+        if isinstance(chef.sosteniendo, Plato):
+            if not self.plato.esta_vacio():
+                return "Ya hay un plato con ingredientes aquí."
+            self.plato = chef.sosteniendo
+            chef.sosteniendo = None
+            return "Dejó el plato en la mesa."
+
+        return "No se pudo usar el plato."
+
+    def dibujar(self, surface: pygame.Surface, assets: Dict[str, pygame.Surface]) -> None:
+        """Dibuja la mesa y el plato."""
+        super().dibujar(surface, assets)
+        x, y = grid_to_pixel(self.posicion)
+        dibujar_plato(surface, self.plato, x + 6, y + 6, 44)
+
+
+class EstacionEntrega(Estacion):
+    """Recibe platos completos y los compara con las recetas activas."""
+
+    def __init__(self, posicion: Tuple[int, int]) -> None:
+        """Crea la estación donde se entregan los platos."""
+        super().__init__("Entrega", "entrega", posicion)
+
+    def interactuar(self, cocina: "Cocina", chef: "Chef") -> str:
+        """Compara el plato con las órdenes y suma puntos."""
+        if chef.sosteniendo is None:
+            return "Debe traer un plato armado."
+        if isinstance(chef.sosteniendo, Ingrediente):
+            return "Ahora la entrega solo acepta platos, no ingredientes sueltos."
+
+        plato = chef.sosteniendo
+        if plato.esta_vacio():
+            return "No entregue un plato vacío."
+
+        for receta in list(cocina.ordenes):
+            if receta.comparar_plato(plato):
+                cocina.puntos = max(0, cocina.puntos + receta.puntos_receta)
+                cocina.ordenes.remove(receta)
+                chef.sosteniendo = None
+                cocina.agregar_mensaje("+" + str(receta.puntos_receta), GREEN)
+                return f"Entregó {receta.nombre}. +{receta.puntos_receta} puntos."
+
+        chef.sosteniendo = None
+        cocina.puntos = max(0, cocina.puntos - 50)
+        cocina.agregar_mensaje("-50", RED)
+        return "Plato incorrecto. -50 puntos."
+
+
+# Variable global para que las estaciones dibujen iconos
+
+cocina_assets_actuales: Dict[str, Dict[str, pygame.Surface]] = {}
+
+
+def dibujar_plato(surface: pygame.Surface, plato: Plato, x: int, y: int, size: int) -> None:
+    """Dibuja un plato y sus ingredientes."""
+    pygame.draw.ellipse(surface, (250, 250, 245), (x, y, size, size))
+    pygame.draw.ellipse(surface, (120, 120, 120), (x, y, size, size), 2)
+    pygame.draw.ellipse(surface, (220, 220, 215), (x + 7, y + 7, size - 14, size - 14), 1)
+
+    for idx, ingrediente in enumerate(plato.ingredientes[:6]):
+        icon = require_global_asset("ingredients", ingrediente.asset_key)
+        px = x + 5 + (idx % 3) * 12
+        py = y + 9 + (idx // 3) * 13
+        mini = pygame.transform.smoothscale(icon, (15, 15))
+        surface.blit(mini, (px, py))
+
+
+
+# Carga centralizada de imágenes (commits)
+cocina_assets_actuales: Dict[str, Dict[str, pygame.Surface]] = {}
+
+
+def cargar_assets_juego() -> Dict[str, Dict[str, pygame.Surface]]:
+    """Carga todos los assets necesarios. Si falta uno, el juego se detiene."""
+    global cocina_assets_actuales
+    assets: Dict[str, Dict[str, pygame.Surface]] = {
+        "ui": {},
+        "backgrounds": {},
+        "chefs": {},
+        "stations": {},
+        "ingredients": {},
+    }
+    validar_archivos_assets()
+
+    ui_sizes = {
+        "inicio_fondo": (WIDTH, HEIGHT),
+        "inicio_titulo": (760, 160),
+        "boton_empezar": (520, 84),
+        "boton_salir": (520, 84),
+        "boton_about": (520, 84),
+        "mapas_fondo": (WIDTH, HEIGHT),
+        "mapas_titulo": (720, 120),
+        "mapa_mcdonalds": (790, 96),
+        "mapa_cacheton": (790, 96),
+        "mapa_nave": (790, 96),
+        "about_fondo": (WIDTH, HEIGHT),
+        "about_titulo": (640, 120),
+        "about_panel": (900, 430),
+        "boton_volver": (250, 58),
+    }
+    for key, size in ui_sizes.items():
+        assets["ui"][key] = load_image(ASSET_PATHS["ui"][key], size)
+    assets["ui"]["selector"] = load_selector_image(ASSET_PATHS["ui"]["selector"])
+
+    for name, rel_path in ASSET_PATHS["backgrounds"].items():
+        assets["backgrounds"][name] = load_image(rel_path, (WIDTH, HEIGHT))
+
+    chef_size = (TILE - 14, TILE - 14)
+    for key, rel_path in ASSET_PATHS["chefs"].items():
+        assets["chefs"][key] = load_image(rel_path, chef_size)
+
+    for key, rel_path in ASSET_PATHS["stations"].items():
+        assets["stations"][key] = load_image(rel_path, (TILE, TILE))
+
+    for key, rel_path in ASSET_PATHS["ingredients"].items():
+        assets["ingredients"][key] = load_image(rel_path, (30, 30))
+
+    cocina_assets_actuales = assets
+    return assets
+
 
 class Game:
-    """Demostración de ingredientes, platos y recetas."""
+    """Demostración de estaciones de cocina."""
 
     def __init__(self) -> None:
         pygame.init()
-        pygame.display.set_caption("Crazy Snack Rush - recetas")
+        pygame.display.set_caption("Crazy Snack Rush - estaciones")
         self.screen = pygame.display.set_mode((WIDTH, HEIGHT))
         self.clock = pygame.time.Clock()
         self.running = True
-        self.plato = Plato()
-        carne = Proteina("carne", "carne")
-        carne.preparar()
-        self.plato.agregar(PanesYBases("pan", "pan"))
-        self.plato.agregar(carne)
-        self.receta = Receta("Hamburguesa simple", ["pan:listo", "carne:cocinado"])
+        self.assets = cargar_assets_juego()
+        self.estaciones = [
+            Despensa(PanesYBases("pan", "pan"), (1, 1)),
+            Despensa(Proteina("carne", "carne"), (2, 1)),
+            EstacionTrabajo("Tabla", "tabla", (4, 2), ["vegetal_fruta"]),
+            EstacionTrabajo("Cocina", "cocina", (6, 2), ["proteina"], True, 7.0),
+            EstacionTrabajo("Freidora", "freidora", (8, 2), ["papa_freir"], True, 7.0),
+            EstacionPlato((10, 3)),
+            EstacionEntrega((12, 3)),
+        ]
 
     def ejecutar(self) -> None:
         while self.running:
-            self.clock.tick(FPS)
+            dt = self.clock.tick(FPS) / 1000.0
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     self.running = False
                 elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                     self.running = False
 
-            self.screen.fill((245, 240, 225))
-            draw_text(self.screen, "Sistema de ingredientes y recetas", 80, 90, 34, BLACK, True)
-            draw_text(self.screen, "Receta: " + self.receta.nombre, 80, 160, 26, BLACK, True)
-            draw_text(self.screen, "Requiere: " + self.receta.texto_ingredientes(), 80, 210, 22, DARK)
-            draw_text(self.screen, "Plato armado: " + self.plato.descripcion(), 80, 270, 22, DARK)
-            resultado = "Correcto" if self.receta.comparar_plato(self.plato) else "Incorrecto"
-            draw_text(self.screen, "Resultado: " + resultado, 80, 330, 28, GREEN if resultado == "Correcto" else RED, True)
+            for estacion in self.estaciones:
+                estacion.actualizar(dt)
+
+            self.screen.blit(self.assets["backgrounds"]["mcdonalds"], (0, 0))
+            draw_text(self.screen, "Estaciones: despensa, tabla, cocina, freidora, plato y entrega", 50, 45, 24, BLACK, True)
+            for estacion in self.estaciones:
+                estacion.dibujar(self.screen, self.assets["stations"])
             pygame.display.flip()
         pygame.quit()
         sys.exit()
