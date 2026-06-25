@@ -1,22 +1,16 @@
 """
-Crazy Snack Rush - Diego Herrera y Emanuel Rojas
-Temáticas: McDonald's, Soda El Cachetón y Bar La Nave.
-
-Cómo ejecutar:
-    pip install pygame (Python 3.13 e inferiores)
-    python main.py
-
-Controles:
-    1, 2, 3        escoger escenario
-    WASD / Flechas  mover al chef activo
-    ESPACIO         interactuar
-    TAB             cambiar entre Chef 1 y Chef 2
-    Q               botar lo que lleva el chef
-    P               pausar
-    R               reiniciar escenario
-    N               siguiente escenario cuando termina la partida
-    ESC             volver al menú / salir
-
+Instituto Tecnológico de Costa Rica
+Escuela de Ingeniería en Computadores
+Introducción a la programación
+2026
+Grupo 4
+Python 3.13.13
+Emanuel Rojas Benavides y Diego Herrera Rivera
+Proyecto 2 
+Descripción: Recrear una versión simplificada del juego Overcooked 2. Crazy
+Snack Rush TEC 
+Versión del programa: 1.0.0
+Requerimientos del sistema: Python 3, Pillow y Pygame
 """
 
 import math
@@ -24,13 +18,7 @@ import os
 import random
 import sys
 from typing import Dict, List, Optional, Tuple, Union
-
-try:
-    import pygame
-except ImportError:
-    print("Falta instalar pygame. Use: pip install pygame")
-    raise
-
+import pygame
 
 
 # Configuración general predeterminada
@@ -234,6 +222,7 @@ def formato_tiempo(segundos: float) -> str:
     """Convierte segundos al formato minutos y segundos."""
     segundos = max(0, int(segundos))
     return f"{segundos // 60}:{segundos % 60:02d}"
+
 # Clases Ingredientes
 
 class Ingrediente:
@@ -399,9 +388,9 @@ class Receta:
         """Crea una orden con tiempo y puntos."""
         self.nombre = nombre
         self.ingredientes_requeridos = list(ingredientes_requeridos)
-        self.puntos_originales = len(ingredientes_requeridos) * 100
+        self.puntos_originales = len(ingredientes_requeridos) * 25
         self.puntos_receta = self.puntos_originales
-        self.max_time_receta = 18 + len(ingredientes_requeridos) * 12
+        self.max_time_receta = 10 + len(ingredientes_requeridos) * 6
         self.tiempo_restante = float(self.max_time_receta)
 
     def actualizar_tiempo(self, dt: float) -> bool:
@@ -896,6 +885,7 @@ class Cocina:
         self.mensajes_flotantes.append({"texto": texto, "color": color, "x": GRID_X + GRID_COLS * TILE // 2, "y": GRID_Y + 55, "t": 1.4})
 
 # Ingredientes
+
 def ing_pan() -> PanesYBases:
     """Crea un pan."""
     return PanesYBases("pan", "pan")
@@ -978,6 +968,23 @@ def ing_salchichon() -> Proteina:
 
 def ing_queso() -> PanesYBases:
     """Crea queso listo."""
+    return PanesYBases("queso", "queso")
+
+
+
+# DATOS DE LOS 3 RESTAURANTES
+
+# Layout:
+#   # pared
+#   . piso
+#   1 chef 1
+#   2 chef 2
+#   S cocina
+#   T tabla
+#   F freidora
+#   E entrega
+#   P mesa con plato
+#   letras minúsculas: despensas definidas en cada escenario
 ESCENARIOS: List[Dict] = [
     {
         "nombre": "McDonald's",
@@ -1084,155 +1091,436 @@ ESCENARIOS: List[Dict] = [
 
 # Juego Principal
 
-
-# Carga centralizada de imágenes obligatorias para las versiones intermedias.
-cocina_assets_actuales: Dict[str, Dict[str, pygame.Surface]] = {}
-
-
-def cargar_assets_juego() -> Dict[str, Dict[str, pygame.Surface]]:
-    """Carga todos los assets necesarios. Si falta uno, el juego se detiene."""
-    global cocina_assets_actuales
-    assets: Dict[str, Dict[str, pygame.Surface]] = {
-        "ui": {},
-        "backgrounds": {},
-        "chefs": {},
-        "stations": {},
-        "ingredients": {},
-    }
-    validar_archivos_assets()
-
-    ui_sizes = {
-        "inicio_fondo": (WIDTH, HEIGHT),
-        "inicio_titulo": (760, 160),
-        "boton_empezar": (520, 84),
-        "boton_salir": (520, 84),
-        "boton_about": (520, 84),
-        "mapas_fondo": (WIDTH, HEIGHT),
-        "mapas_titulo": (720, 120),
-        "mapa_mcdonalds": (790, 96),
-        "mapa_cacheton": (790, 96),
-        "mapa_nave": (790, 96),
-        "about_fondo": (WIDTH, HEIGHT),
-        "about_titulo": (640, 120),
-        "about_panel": (900, 430),
-        "boton_volver": (250, 58),
-    }
-    for key, size in ui_sizes.items():
-        assets["ui"][key] = load_image(ASSET_PATHS["ui"][key], size)
-    assets["ui"]["selector"] = load_selector_image(ASSET_PATHS["ui"]["selector"])
-
-    for name, rel_path in ASSET_PATHS["backgrounds"].items():
-        assets["backgrounds"][name] = load_image(rel_path, (WIDTH, HEIGHT))
-
-    chef_size = (TILE - 14, TILE - 14)
-    for key, rel_path in ASSET_PATHS["chefs"].items():
-        assets["chefs"][key] = load_image(rel_path, chef_size)
-
-    for key, rel_path in ASSET_PATHS["stations"].items():
-        assets["stations"][key] = load_image(rel_path, (TILE, TILE))
-
-    for key, rel_path in ASSET_PATHS["ingredients"].items():
-        assets["ingredients"][key] = load_image(rel_path, (30, 30))
-
-    cocina_assets_actuales = assets
-    return assets
-
-
 class Game:
-    """Partida directa con tres escenarios seleccionables por teclado."""
+    """Controla las pantallas, teclas, dibujos y el ciclo del juego."""
 
     def __init__(self) -> None:
+        """Prepara la ventana y los datos iniciales."""
         pygame.init()
-        pygame.display.set_caption("Crazy Snack Rush - tres escenarios")
+        pygame.display.set_caption("Crazy Snack Rush - Unificado")
         self.screen = pygame.display.set_mode((WIDTH, HEIGHT))
         self.clock = pygame.time.Clock()
         self.running = True
-        self.assets = cargar_assets_juego()
+        self.estado = "inicio"
         self.indice_escenario = 0
-        self.cocina = Cocina(ESCENARIOS[self.indice_escenario])
+        self.seleccion_inicio = 0
+        self.seleccion_menu = 0
+        self.cocina: Optional[Cocina] = None
         self.chef_activo = 0
+        self.pausa = False
+        self.assets = self.cargar_assets()
+        ancho_boton, alto_boton = 520, 84
+        x_boton = (WIDTH - ancho_boton) // 2
+        self.rects_inicio = [
+            pygame.Rect(x_boton, 300, ancho_boton, alto_boton),
+            pygame.Rect(x_boton, 405, ancho_boton, alto_boton),
+            pygame.Rect(x_boton, 510, ancho_boton, alto_boton),
+        ]
+        self.rects_menu = [
+            pygame.Rect((WIDTH - 790) // 2, 205 + i * 122, 790, 96)
+            for i in range(len(ESCENARIOS))
+        ]
+        self.rect_volver = pygame.Rect(42, HEIGHT - 84, 250, 58)
 
-    def iniciar(self, indice: int) -> None:
-        self.indice_escenario = indice
-        self.cocina = Cocina(ESCENARIOS[indice])
+    def cargar_assets(self) -> Dict[str, Dict[str, pygame.Surface]]:
+        """Carga todas las imágenes del juego."""
+        global cocina_assets_actuales
+        assets: Dict[str, Dict[str, pygame.Surface]] = {
+            "ui": {},
+            "backgrounds": {},
+            "chefs": {},
+            "stations": {},
+            "ingredients": {},
+        }
+
+        validar_archivos_assets()
+
+        ui_sizes = {
+            "inicio_fondo": (WIDTH, HEIGHT),
+            "inicio_titulo": (760, 160),
+            "boton_empezar": (520, 84),
+            "boton_salir": (520, 84),
+            "boton_about": (520, 84),
+            "mapas_fondo": (WIDTH, HEIGHT),
+            "mapas_titulo": (720, 120),
+            "mapa_mcdonalds": (790, 96),
+            "mapa_cacheton": (790, 96),
+            "mapa_nave": (790, 96),
+            "about_fondo": (WIDTH, HEIGHT),
+            "about_titulo": (640, 120),
+            "about_panel": (900, 430),
+            "boton_volver": (250, 58),
+        }
+        for key, size in ui_sizes.items():
+            assets["ui"][key] = load_image(ASSET_PATHS["ui"][key], size)
+        assets["ui"]["selector"] = load_selector_image(ASSET_PATHS["ui"]["selector"])
+
+        for name, rel_path in ASSET_PATHS["backgrounds"].items():
+            assets["backgrounds"][name] = load_image(rel_path, (WIDTH, HEIGHT))
+
+        chef_size = (TILE - 14, TILE - 14)
+        for key, rel_path in ASSET_PATHS["chefs"].items():
+            assets["chefs"][key] = load_image(rel_path, chef_size)
+
+        for key, rel_path in ASSET_PATHS["stations"].items():
+            assets["stations"][key] = load_image(rel_path, (TILE, TILE))
+
+        for key, rel_path in ASSET_PATHS["ingredients"].items():
+            assets["ingredients"][key] = load_image(rel_path, (30, 30))
+
+        cocina_assets_actuales = assets
+        return assets
+
+    def iniciar_cocina(self, numero: int) -> None:
+        """Inicia el restaurante escogido."""
+        self.indice_escenario = numero
+        self.cocina = Cocina(ESCENARIOS[numero])
         self.chef_activo = 0
+        self.pausa = False
+        self.estado = "juego"
+
+    def reiniciar_actual(self) -> None:
+        """Vuelve a empezar el restaurante actual."""
+        self.iniciar_cocina(self.indice_escenario)
+
+    def activar_opcion_inicio(self) -> None:
+        """Abre la opción elegida en la pantalla inicial."""
+        if self.seleccion_inicio == 0:
+            self.estado = "seleccion_mapa"
+        elif self.seleccion_inicio == 1:
+            self.running = False
+        else:
+            self.estado = "about"
 
     def manejar_eventos(self) -> None:
+        """Lee el teclado, el mouse y el botón de cerrar."""
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 self.running = False
-            elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_ESCAPE:
-                    self.running = False
-                elif event.key == pygame.K_TAB:
-                    self.chef_activo = 1 - self.chef_activo
-                elif event.key == pygame.K_SPACE:
-                    chef = self.cocina.chefs[self.chef_activo]
-                    self.cocina.mensaje = chef.interactuar(self.cocina)
-                elif event.key == pygame.K_q:
-                    self.cocina.mensaje = self.cocina.chefs[self.chef_activo].descartar()
-                elif event.key == pygame.K_r:
-                    self.iniciar(self.indice_escenario)
-                elif event.key in (pygame.K_1, pygame.K_2, pygame.K_3):
-                    nuevo = int(event.unicode) - 1
-                    if 0 <= nuevo < len(ESCENARIOS):
-                        self.iniciar(nuevo)
+                continue
 
-    def mover(self, dt: float) -> None:
+            if event.type == pygame.MOUSEMOTION:
+                if self.estado == "inicio":
+                    for i, rect in enumerate(self.rects_inicio):
+                        if rect.collidepoint(event.pos):
+                            self.seleccion_inicio = i
+                elif self.estado == "seleccion_mapa":
+                    for i, rect in enumerate(self.rects_menu):
+                        if rect.collidepoint(event.pos):
+                            self.seleccion_menu = i
+
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                if self.estado == "inicio":
+                    for i, rect in enumerate(self.rects_inicio):
+                        if rect.collidepoint(event.pos):
+                            self.seleccion_inicio = i
+                            self.activar_opcion_inicio()
+                            break
+                elif self.estado == "seleccion_mapa":
+                    if self.rect_volver.collidepoint(event.pos):
+                        self.estado = "inicio"
+                    else:
+                        for i, rect in enumerate(self.rects_menu):
+                            if rect.collidepoint(event.pos):
+                                self.iniciar_cocina(i)
+                                break
+                elif self.estado == "about" and self.rect_volver.collidepoint(event.pos):
+                    self.estado = "inicio"
+
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
+                    if self.estado in ("juego", "fin"):
+                        self.estado = "seleccion_mapa"
+                    elif self.estado in ("seleccion_mapa", "about"):
+                        self.estado = "inicio"
+                    else:
+                        self.running = False
+                    continue
+
+                if self.estado == "inicio":
+                    if event.key in (pygame.K_UP, pygame.K_w):
+                        self.seleccion_inicio = (self.seleccion_inicio - 1) % len(self.rects_inicio)
+                    elif event.key in (pygame.K_DOWN, pygame.K_s):
+                        self.seleccion_inicio = (self.seleccion_inicio + 1) % len(self.rects_inicio)
+                    elif event.key in (pygame.K_RETURN, pygame.K_SPACE):
+                        self.activar_opcion_inicio()
+
+                elif self.estado == "seleccion_mapa":
+                    if event.key in (pygame.K_1, pygame.K_KP1):
+                        self.iniciar_cocina(0)
+                    elif event.key in (pygame.K_2, pygame.K_KP2):
+                        self.iniciar_cocina(1)
+                    elif event.key in (pygame.K_3, pygame.K_KP3):
+                        self.iniciar_cocina(2)
+                    elif event.key in (pygame.K_UP, pygame.K_w):
+                        self.seleccion_menu = (self.seleccion_menu - 1) % len(ESCENARIOS)
+                    elif event.key in (pygame.K_DOWN, pygame.K_s):
+                        self.seleccion_menu = (self.seleccion_menu + 1) % len(ESCENARIOS)
+                    elif event.key in (pygame.K_RETURN, pygame.K_SPACE):
+                        self.iniciar_cocina(self.seleccion_menu)
+
+                elif self.estado == "about":
+                    if event.key in (pygame.K_RETURN, pygame.K_SPACE, pygame.K_BACKSPACE):
+                        self.estado = "inicio"
+
+                elif self.estado == "juego" and self.cocina:
+                    if event.key == pygame.K_p:
+                        self.pausa = not self.pausa
+                    elif event.key == pygame.K_TAB and not self.cocina.juego_terminado:
+                        self.chef_activo = 1 - self.chef_activo
+                        self.cocina.mensaje = f"Ahora controla a {self.cocina.chefs[self.chef_activo].nombre}."
+                    elif event.key == pygame.K_SPACE and not self.cocina.juego_terminado:
+                        mensaje = self.cocina.chefs[self.chef_activo].interactuar(self.cocina)
+                        self.cocina.mensaje = mensaje
+                    elif event.key == pygame.K_q and not self.cocina.juego_terminado:
+                        self.cocina.mensaje = self.cocina.chefs[self.chef_activo].descartar()
+                    elif event.key == pygame.K_r:
+                        self.reiniciar_actual()
+                    elif event.key in (pygame.K_1, pygame.K_KP1):
+                        self.iniciar_cocina(0)
+                    elif event.key in (pygame.K_2, pygame.K_KP2):
+                        self.iniciar_cocina(1)
+                    elif event.key in (pygame.K_3, pygame.K_KP3):
+                        self.iniciar_cocina(2)
+
+                elif self.estado == "fin" and self.cocina:
+                    if event.key == pygame.K_r:
+                        self.reiniciar_actual()
+                    elif event.key == pygame.K_n and self.indice_escenario < len(ESCENARIOS) - 1:
+                        self.iniciar_cocina(self.indice_escenario + 1)
+
+    def manejar_movimiento_continuo(self, dt: float) -> None:
+        """Mueve al chef mientras una tecla está presionada."""
+        if self.estado != "juego" or self.cocina is None or self.cocina.juego_terminado or self.pausa:
+            return
+
         keys = pygame.key.get_pressed()
         chef = self.cocina.chefs[self.chef_activo]
-        vx = 0
-        vy = 0
-        if keys[pygame.K_w] or keys[pygame.K_UP]:
-            vy -= 1
-        if keys[pygame.K_s] or keys[pygame.K_DOWN]:
-            vy += 1
-        if keys[pygame.K_a] or keys[pygame.K_LEFT]:
+        vx, vy = 0, 0
+        if keys[pygame.K_LEFT] or keys[pygame.K_a]:
             vx -= 1
-        if keys[pygame.K_d] or keys[pygame.K_RIGHT]:
+        if keys[pygame.K_RIGHT] or keys[pygame.K_d]:
             vx += 1
+        if keys[pygame.K_UP] or keys[pygame.K_w]:
+            vy -= 1
+        if keys[pygame.K_DOWN] or keys[pygame.K_s]:
+            vy += 1
+
         if vx or vy:
-            mag = math.hypot(vx, vy)
-            ux, uy = vx / mag, vy / mag
-            if abs(vx) > abs(vy):
-                chef.direccion = (1 if vx > 0 else -1, 0)
-            else:
-                chef.direccion = (0, 1 if vy > 0 else -1)
+            magnitud = math.hypot(vx, vy)
+            ux, uy = vx / magnitud, vy / magnitud
+            if vy < 0:
+                chef.direccion = (0, -1)
+            elif vy > 0:
+                chef.direccion = (0, 1)
+            elif vx < 0:
+                chef.direccion = (-1, 0)
+            elif vx > 0:
+                chef.direccion = (1, 0)
             self.cocina.mover(chef, ux * Chef.VEL * dt, uy * Chef.VEL * dt)
 
-    def dibujar(self) -> None:
-        self.screen.blit(self.assets["backgrounds"][self.cocina.background_key], (0, 0))
+    def actualizar(self, dt: float) -> None:
+        """Actualiza la partida cuando no está pausada."""
+        if self.estado == "juego" and self.cocina and not self.pausa:
+            self.cocina.actualizar(dt)
+            if self.cocina.juego_terminado:
+                self.estado = "fin"
+
+    def dibujar_selector(self, rect: pygame.Rect) -> None:
+        """Dibuja el marco de la opción seleccionada."""
+        selector = pygame.transform.smoothscale(
+            self.assets["ui"]["selector"], (rect.width + 20, rect.height + 20)
+        )
+        self.screen.blit(selector, (rect.x - 10, rect.y - 10))
+
+    def dibujar_inicio(self) -> None:
+        """Dibuja la pantalla inicial."""
+        ui = self.assets["ui"]
+        self.screen.blit(ui["inicio_fondo"], (0, 0))
+        self.screen.blit(ui["inicio_titulo"], ((WIDTH - 760) // 2, 72))
+        botones = ("boton_empezar", "boton_salir", "boton_about")
+        for i, (key, rect) in enumerate(zip(botones, self.rects_inicio)):
+            self.screen.blit(ui[key], rect.topleft)
+            if i == self.seleccion_inicio:
+                self.dibujar_selector(rect)
+        pygame.display.flip()
+
+    def dibujar_seleccion_mapa(self) -> None:
+        """Dibuja la pantalla para escoger restaurante."""
+        ui = self.assets["ui"]
+        self.screen.blit(ui["mapas_fondo"], (0, 0))
+        self.screen.blit(ui["mapas_titulo"], ((WIDTH - 720) // 2, 52))
+        mapas = ("mapa_mcdonalds", "mapa_cacheton", "mapa_nave")
+        for i, (key, rect) in enumerate(zip(mapas, self.rects_menu)):
+            self.screen.blit(ui[key], rect.topleft)
+            if i == self.seleccion_menu:
+                self.dibujar_selector(rect)
+        self.screen.blit(ui["boton_volver"], self.rect_volver.topleft)
+        pygame.display.flip()
+
+    def dibujar_about(self) -> None:
+        """Dibuja la pantalla de información."""
+        ui = self.assets["ui"]
+        self.screen.blit(ui["about_fondo"], (0, 0))
+        self.screen.blit(ui["about_titulo"], ((WIDTH - 640) // 2, 42))
+        self.screen.blit(ui["about_panel"], ((WIDTH - 900) // 2, 170))
+        self.screen.blit(ui["boton_volver"], self.rect_volver.topleft)
+        pygame.display.flip()
+
+    def dibujar_juego(self) -> None:
+        """Dibuja todos los elementos de la partida."""
+        assert self.cocina is not None
+        cocina = self.cocina
+
+        background = self.assets["backgrounds"].get(cocina.background_key)
+        if background:
+            self.screen.blit(background, (0, 0))
+        overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+        overlay.fill((255, 255, 255, 25))
+        self.screen.blit(overlay, (0, 0))
+
+        self.dibujar_grid()
+        self.dibujar_paredes()
+
+        for estacion in cocina.estaciones:
+            estacion.dibujar(self.screen, self.assets["stations"])
+
+        self.dibujar_resaltado()
+
+        for index, chef in enumerate(cocina.chefs):
+            chef.dibujar(self.screen, self.assets["chefs"], index == self.chef_activo)
+
+        for mensaje in cocina.mensajes_flotantes:
+            draw_text(self.screen, mensaje["texto"], int(mensaje["x"]), int(mensaje["y"]), 34,
+                      mensaje["color"], True, centered=True)
+
+        self.dibujar_panel_ui()
+
+        if self.pausa:
+            self.dibujar_pausa()
+
+        pygame.display.flip()
+
+    def dibujar_grid(self) -> None:
+        """Dibuja una cuadrícula suave para dejar ver el fondo."""
+        grid = pygame.Surface((GRID_COLS * TILE, GRID_ROWS * TILE), pygame.SRCALPHA)
+        grid.fill((245, 240, 225, 32))
+        for col in range(GRID_COLS + 1):
+            x = col * TILE
+            pygame.draw.line(grid, (45, 45, 45, 45), (x, 0), (x, GRID_ROWS * TILE))
+        for row in range(GRID_ROWS + 1):
+            y = row * TILE
+            pygame.draw.line(grid, (45, 45, 45, 45), (0, y), (GRID_COLS * TILE, y))
+        self.screen.blit(grid, (GRID_X, GRID_Y))
+
+    def dibujar_paredes(self) -> None:
+        """Dibuja las paredes del restaurante."""
+        assert self.cocina is not None
         for col, row in self.cocina.paredes:
             x, y = grid_to_pixel((col, row))
             pygame.draw.rect(self.screen, WALL, (x, y, TILE, TILE), border_radius=6)
             pygame.draw.rect(self.screen, BLACK, (x, y, TILE, TILE), 2, border_radius=6)
-        for estacion in self.cocina.estaciones:
-            estacion.dibujar(self.screen, self.assets["stations"])
-        for index, chef in enumerate(self.cocina.chefs):
-            chef.dibujar(self.screen, self.assets["chefs"], index == self.chef_activo)
 
-        draw_text(self.screen, self.cocina.nombre, UI_X, 75, 26, BLACK, True)
-        draw_text(self.screen, "1 McDonald's | 2 Cachetón | 3 La Nave", UI_X, 112, 16, DARK, True)
-        draw_text(self.screen, "Tiempo: " + formato_tiempo(self.cocina.tiempo_restante), UI_X, 150, 22, RED, True)
-        draw_text(self.screen, "Puntos: " + str(self.cocina.puntos), UI_X, 185, 22, BLUE, True)
-        draw_text(self.screen, "Órdenes:", UI_X, 235, 22, BLACK, True)
-        y = 270
-        for receta in self.cocina.ordenes[:4]:
-            draw_text(self.screen, receta.nombre, UI_X, y, 18, BLACK, True)
-            draw_text(self.screen, receta.texto_ingredientes(), UI_X, y + 24, 15, DARK)
-            y += 70
-        draw_wrapped_text(self.screen, self.cocina.mensaje, UI_X, 610, WIDTH - UI_X - 40, 18, BLACK)
+    def dibujar_resaltado(self) -> None:
+        """Marca la casilla que está frente al chef activo."""
+        assert self.cocina is not None
+        chef = self.cocina.chefs[self.chef_activo]
+        col, row = chef.posicion_frente()
+        if 0 <= col < GRID_COLS and 0 <= row < GRID_ROWS:
+            x, y = grid_to_pixel((col, row))
+            s = pygame.Surface((TILE, TILE), pygame.SRCALPHA)
+            s.fill((255, 235, 130, 80))
+            self.screen.blit(s, (x, y))
+
+    def dibujar_panel_ui(self) -> None:
+        """Dibuja un panel lateral sencillo."""
+        assert self.cocina is not None
+        cocina = self.cocina
+        panel_rect = pygame.Rect(UI_X, 54, WIDTH - UI_X - 25, 570)
+        panel = pygame.Surface(panel_rect.size, pygame.SRCALPHA)
+        panel.fill((250, 250, 246, 225))
+        self.screen.blit(panel, panel_rect.topleft)
+        pygame.draw.rect(self.screen, (45, 45, 45), panel_rect, 2, border_radius=10)
+
+        draw_text(self.screen, cocina.nombre, panel_rect.centerx, 78, 25, BLACK, True, centered=True)
+        pygame.draw.line(self.screen, (180, 180, 175),
+                         (UI_X + 16, 113), (panel_rect.right - 16, 113), 1)
+
+        draw_text(self.screen, formato_tiempo(cocina.tiempo_restante), UI_X + 22, 127, 26, RED, True)
+        draw_text(self.screen, str(cocina.puntos), panel_rect.right - 22, 127, 26, BLUE, True)
+        draw_text(self.screen, "TIEMPO", UI_X + 22, 157, 12, GRAY, True)
+        draw_text(self.screen, "PUNTOS", panel_rect.right - 54, 163, 12,
+                  GRAY, True, centered=True)
+
+        draw_text(self.screen, "ÓRDENES", UI_X + 18, 197, 20, BLACK, True)
+        y = 229
+        if not cocina.ordenes:
+            draw_text(self.screen, "Sin órdenes activas", UI_X + 18, y, 18, GRAY)
+        for receta in cocina.ordenes[:4]:
+            tarjeta = pygame.Rect(UI_X + 14, y, panel_rect.width - 28, 82)
+            pygame.draw.rect(self.screen, (255, 255, 252), tarjeta, border_radius=7)
+            pygame.draw.rect(self.screen, (190, 190, 185), tarjeta, 1, border_radius=7)
+            draw_text(self.screen, receta.nombre, tarjeta.x + 11, tarjeta.y + 8, 17, BLACK, True)
+            draw_text(self.screen, f"{receta.puntos_receta} pts", tarjeta.right - 68,
+                      tarjeta.y + 9, 14, BLUE, True)
+
+            for i, clave in enumerate(receta.ingredientes_requeridos[:6]):
+                nombre = clave.split(":")[0]
+                icono = require_asset(self.assets["ingredients"], nombre, "ingredients")
+                mini = pygame.transform.smoothscale(icono, (25, 25))
+                self.screen.blit(mini, (tarjeta.x + 11 + i * 31, tarjeta.y + 39))
+
+            ancho = int((tarjeta.width - 22) * receta.tiempo_restante / receta.max_time_receta)
+            pygame.draw.rect(self.screen, (225, 225, 220),
+                             (tarjeta.x + 11, tarjeta.bottom - 9, tarjeta.width - 22, 4))
+            pygame.draw.rect(self.screen, RED, (tarjeta.x + 11, tarjeta.bottom - 9, ancho, 4))
+            y += 90
+
+    def dibujar_pausa(self) -> None:
+        """Dibuja la capa de pausa."""
+        overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 150))
+        self.screen.blit(overlay, (0, 0))
+        draw_text(self.screen, "PAUSA", WIDTH // 2, HEIGHT // 2 - 20, 48, WHITE, True, centered=True)
+        draw_text(self.screen, "P para seguir", WIDTH // 2, HEIGHT // 2 + 35, 26, WHITE, centered=True)
+
+    def dibujar_fin(self) -> None:
+        """Dibuja el resultado al terminar la partida."""
+        assert self.cocina is not None
+        self.dibujar_juego()
+        overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 170))
+        self.screen.blit(overlay, (0, 0))
+        center_rect = pygame.Rect(250, 220, 650, 265)
+        pygame.draw.rect(self.screen, WHITE, center_rect, border_radius=14)
+        pygame.draw.rect(self.screen, BLACK, center_rect, 3, border_radius=14)
+        draw_text(self.screen, "Partida terminada", center_rect.centerx, center_rect.y + 50, 36, BLACK, True, centered=True)
+        draw_text(self.screen, f"Puntaje final: {self.cocina.puntos}", center_rect.centerx, center_rect.y + 108, 30, BLUE, True, centered=True)
+        if self.indice_escenario < len(ESCENARIOS) - 1:
+            draw_text(self.screen, "N = siguiente restaurante", center_rect.centerx, center_rect.y + 165, 22, DARK, centered=True)
+        draw_text(self.screen, "R = reintentar | ESC = menú", center_rect.centerx, center_rect.y + 202, 22, DARK, centered=True)
         pygame.display.flip()
 
     def ejecutar(self) -> None:
+        """Mantiene el juego abierto hasta que el jugador salga."""
         while self.running:
             dt = self.clock.tick(FPS) / 1000.0
-            dt = min(dt, 0.05)
+            if dt > 0.05:
+                dt = 0.05
             self.manejar_eventos()
-            if not self.cocina.juego_terminado:
-                self.mover(dt)
-                self.cocina.actualizar(dt)
-            self.dibujar()
+            self.manejar_movimiento_continuo(dt)
+            self.actualizar(dt)
+            if self.estado == "inicio":
+                self.dibujar_inicio()
+            elif self.estado == "seleccion_mapa":
+                self.dibujar_seleccion_mapa()
+            elif self.estado == "about":
+                self.dibujar_about()
+            elif self.estado == "juego":
+                self.dibujar_juego()
+            elif self.estado == "fin":
+                self.dibujar_fin()
+
         pygame.quit()
         sys.exit()
 
