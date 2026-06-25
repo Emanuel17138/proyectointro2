@@ -1,0 +1,6 @@
+Coloque aquí las imágenes de la pantalla de inicio, selección de mapas y About.
+
+La lista completa de nombres y tamaños está en:
+assets/README_ASSETS.txt
+
+También puede cambiar cualquier ruta en ASSET_PATHS, dentro de main.py.
